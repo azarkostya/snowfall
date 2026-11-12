@@ -46,6 +46,23 @@ internal sealed class Decorations : IDisposable
             if (r.Width < r.Height) continue; // vertical taskbar: not supported
             if (r.Right <= bounds.Left || r.Left >= bounds.Right || r.Top < bounds.Top || r.Top > bounds.Bottom) continue;
 
+            if (tb.Exposed.Count == 0) continue; // taskbar fully covered by a window
+
+            // Draw only over the visible parts of the taskbar: no lights over a window that covers it.
+            using var clip = new Region(RectangleF.Empty);
+            foreach (var (l, rr) in tb.Exposed)
+                clip.Union(new RectangleF(l - bounds.Left, r.Top - bounds.Top - 80, rr - l, r.Height + 80));
+            var oldClip = g.Clip;
+            g.Clip = clip;
+            try { DrawBar(g, s, tb, bounds, t); }
+            finally { g.Clip = oldClip; oldClip.Dispose(); }
+        }
+    }
+
+    private void DrawBar(Graphics g, Settings s, TrackedWindow tb, Rectangle bounds, float t)
+    {
+        var r = tb.Rect;
+        {
             float scale = Native.ScaleForPoint(r.Left + r.Width / 2, r.Top + r.Height / 2);
             float left = r.Left - bounds.Left, right = r.Right - bounds.Left, top = r.Top - bounds.Top;
             float bottom = r.Bottom - bounds.Top;

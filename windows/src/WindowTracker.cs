@@ -49,8 +49,10 @@ internal sealed class WindowTracker
 
             // No pile on windows touching the top of their monitor (maximized etc.): every flake would land there.
             var screen = Screen.FromRectangle(Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom));
-            if (rect.Top > screen.Bounds.Top + 4 || taskbar)
-                tw.Exposed = ExposedEdge(rect.Left, rect.Right, rect.Top, i, onlyTopmost: taskbar);
+            if (taskbar)
+                tw.Exposed = ExposedBand(rect, i);
+            else if (rect.Top > screen.Bounds.Top + 4)
+                tw.Exposed = ExposedEdge(rect.Left, rect.Right, rect.Top, i);
             Windows.Add(tw);
         }
 
@@ -63,23 +65,38 @@ internal sealed class WindowTracker
                 Hwnd = s.Id,
                 Rect = rect,
                 IsSurface = true,
-                Exposed = ExposedEdge(s.Left, s.Right, s.Top, _raw.Count, onlyTopmost: false),
+                Exposed = ExposedEdge(s.Left, s.Right, s.Top, _raw.Count),
             });
         }
     }
 
-    /// <summary>
-    /// [left, right) at height y minus every window among the first <paramref name="above"/> that spans y.
-    /// The taskbar is drawn above normal windows whatever EnumWindows says, so only topmost ones can cover it.
-    /// </summary>
-    private List<(int L, int R)> ExposedEdge(int left, int right, int y, int above, bool onlyTopmost)
+    /// <summary>[left, right) at height y minus every window among the first <paramref name="above"/> that spans y.</summary>
+    private List<(int L, int R)> ExposedEdge(int left, int right, int y, int above)
     {
         var segs = new List<(int L, int R)> { (left, right) };
         for (int j = 0; j < above && segs.Count > 0; j++)
         {
-            var (_, r, isTaskbar, topmost) = _raw[j];
-            if (onlyTopmost && (!topmost || isTaskbar)) continue;
+            var r = _raw[j].Rect;
             if (r.Top < y - OverlapTolerance && r.Bottom > y + OverlapTolerance)
+                Subtract(segs, r.Left + OverlapTolerance, r.Right - OverlapTolerance);
+        }
+        segs.RemoveAll(s => s.R - s.L < 6);
+        return segs;
+    }
+
+    /// <summary>
+    /// Horizontal parts of the taskbar not covered by any window above it in Z-order. The taskbar is usually
+    /// topmost, but a window can sit over it (taskbar not on top, full-screen-ish apps); then its piles and
+    /// decorations must hide there too. Windows that merely touch it by a pixel or two don't count.
+    /// </summary>
+    private List<(int L, int R)> ExposedBand(RECT bar, int above)
+    {
+        var segs = new List<(int L, int R)> { (bar.Left, bar.Right) };
+        for (int j = 0; j < above && segs.Count > 0; j++)
+        {
+            var (_, r, isTaskbar, _) = _raw[j];
+            if (isTaskbar) continue;
+            if (r.Top < bar.Bottom - OverlapTolerance && r.Bottom > bar.Top + OverlapTolerance)
                 Subtract(segs, r.Left + OverlapTolerance, r.Right - OverlapTolerance);
         }
         segs.RemoveAll(s => s.R - s.L < 6);
