@@ -1,0 +1,62 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish (self-contained single exe)
+        run: >
+          dotnet publish windows/src/Snowfall.csproj -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true -o out
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path out/Snowfall.exe -DestinationPath Snowfall-Windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Snowfall-Windows
+          path: Snowfall-Windows.zip
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build app
+        run: |
+          chmod +x macos/build-app.sh
+          macos/build-app.sh
+      - name: Check binary
+        run: lipo -info macos/build/Snowfall.app/Contents/MacOS/Snowfall
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Snowfall-macOS
+          path: macos/build/Snowfall-macOS.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Snowfall-Windows.zip
+            Snowfall-macOS.zip
+          generate_release_notes: true

@@ -1,0 +1,10 @@
+bin/
+obj/
+dist/
+out/
+*.user
+.vs/
+.DS_Store
+macos/.build/
+macos/build/
+.swiftpm/
