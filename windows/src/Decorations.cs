@@ -71,16 +71,29 @@ internal sealed class Decorations : IDisposable
             // Both are ~66 design units tall; shrink them to fit the bar.
             float k = MathF.Min(scale, (r.Height - 6 * scale) / 66f);
             float floor = bottom - 2 * scale;
-            if (s.Snowman) DrawSnowman(g, left + 30 * k, floor, k, t);
-            if (s.Tree) DrawTree(g, left + (s.Snowman ? 78 : 30) * k, floor, k, t);
-            if (s.Garland) DrawGarland(g, left, right, top, scale, t, s.GarlandMode);
+            var visible = tb.Exposed.Select(e => (L: (float)(e.L - bounds.Left), R: (float)(e.R - bounds.Left))).ToList();
+            // Snowman and tree are ~44 units wide: show them only when they are not cut by a covering window.
+            bool Whole(float cx) => visible.Any(v => cx - 23 * k >= v.L && cx + 23 * k <= v.R);
+            float snowmanX = left + 30 * k, treeX = left + (s.Snowman ? 78 : 30) * k;
+            if (s.Snowman && Whole(snowmanX)) DrawSnowman(g, snowmanX, floor, k, t);
+            if (s.Tree && Whole(treeX)) DrawTree(g, treeX, floor, k, t);
+            if (s.Garland) DrawGarland(g, left, right, top, scale, t, s.GarlandMode, visible);
         }
     }
 
     // ---------------------------------------------------------------- garland
 
-    private void DrawGarland(Graphics g, float left, float right, float top, float s, float t, GarlandMode mode)
+    private void DrawGarland(Graphics g, float left, float right, float top, float s, float t, GarlandMode mode,
+        List<(float L, float R)> visible)
     {
+        // A bulb is drawn only if it and its glow fit wholly inside a visible part of the taskbar.
+        bool Fits(float cx, float half)
+        {
+            foreach (var (l, r) in visible)
+                if (cx - half >= l && cx + half <= r) return true;
+            return false;
+        }
+
         float span = 120 * s, sag = 4 * s, y0 = top + 1.2f * s;
         float WireY(float x)
         {
@@ -105,6 +118,7 @@ internal sealed class Decorations : IDisposable
             float wy = WireY(x);
             float bw = 4.6f * s, bh = 6.6f * s;
             float cx = x, cy = wy + 1.6f * s + bh / 2;
+            if (!Fits(cx, 7 * s)) continue;
 
             // Small glow: neighbours 24 px apart must not merge into a coloured haze over the taskbar.
             DrawGlow(g, c, b, cx, cy, 13 * s);

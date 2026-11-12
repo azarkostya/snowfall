@@ -96,8 +96,9 @@ internal sealed class WindowTracker
         {
             var (_, r, isTaskbar, _) = _raw[j];
             if (isTaskbar) continue;
+            // Vertical tolerance only: sideways the lights must stop exactly at the covering window's edge.
             if (r.Top < bar.Bottom - OverlapTolerance && r.Bottom > bar.Top + OverlapTolerance)
-                Subtract(segs, r.Left + OverlapTolerance, r.Right - OverlapTolerance);
+                Subtract(segs, r.Left, r.Right);
         }
         segs.RemoveAll(s => s.R - s.L < 6);
         return segs;
